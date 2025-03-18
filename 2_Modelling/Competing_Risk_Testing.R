@@ -11,6 +11,7 @@ library(pec) # 2022.05.04
 library(randomForestSRC) # 3.2.3
 library(riskRegression) # 2022.11.28
 library(survival) # 3.5-0
+library(timeROC) # 0.4
 
 # Functions
 
@@ -202,6 +203,24 @@ sum(cindex_csc_ts_disc)
 # Cumulative C-Index FG
 sum(cindex_fgr_ts_disc)
 
+# Time-dependent AUROC
+
+# Ensure states starting with 1 (since we do not have censored data)
+cause_cr <- data_ts_sum_imputed_by_mice$Deterioro + 1
+# Recover time covariate
+time_cr <- data_ts_sum_imputed_by_mice$los
+auroc_t_FG_Full_disc <- rep(0,14)
+
+for(i in 1:14){
+  auroc_temp <- timeROC(T=time_cr,
+                        delta=cause_cr,
+                        weighting="marginal",
+                        marker=compRiskModels_mice_test_full_disc$pred_fgr[,i],
+                        cause=1,
+                        times=c(i+1)*24)
+  auroc_t_FG_Full_disc[i] <- as.numeric(auroc_temp$AUC_2[2])
+}
+
 ## Ensemble learning
 
 # Prepare data-set 
@@ -217,7 +236,22 @@ data_ts_for_rf_full2$Deterioro <- as.factor(as.numeric(data_ts_for_rf_full2$Dete
 pred_rf_full_alt <- predict.rfsrc(arfsurv.obj_disch_full,data_ts_for_rf_full2,
                                   outcome="test")
 
+# Time-dependent AUROC
+
+auroc_t_LR_RSF_Full_disc <- rep(0,14)
+
+for(i in 1:14){
+  auroc_temp <- timeROC(T=time_cr,
+                        delta=cause_cr,
+                        weighting="marginal",
+                        marker=pred_rf_full_alt$cif[,i,1],
+                        cause=1,
+                        times=c(i+1)*24)
+  auroc_t_LR_RSF_Full_disc[i] <- as.numeric(auroc_temp$AUC_1[2])
+}
+
 # Generic formula for RSF
+
 form_rsf_full_alt <- formula(paste0("Surv(time=los, event=Deterioro) ~ ",
                                     paste(names(data_ts_for_rf_full2)[!grepl("Deterioro|los",
                                                                              names(data_ts_for_rf_full2))
@@ -240,6 +274,21 @@ ibs_full_alt <- ibs_full_alt[2,2]
 
 pred_rf_full_alt_fg <- predict.rfsrc(arfsurv.obj_disch_full_fg,data_ts_for_rf_full2,
                                      outcome="test")
+
+# Time-dependent AUROC
+
+auroc_t_GT_RSF_Full_disc <- rep(0,14)
+
+for(i in 1:14){
+  auroc_temp <- timeROC(T=time_cr,
+                        delta=cause_cr,
+                        weighting="marginal",
+                        marker=pred_rf_full_alt_fg$cif[,i,1],
+                        cause=1,
+                        times=c(i+1)*24)
+  auroc_t_GT_RSF_Full_disc[i] <- as.numeric(auroc_temp$AUC_2[2])
+}
+
 # IBS GT-RSF
 
 ibs_full_alt_fg <-  crps(pec::pec(as.matrix(pred_rf_full_alt_fg$cif[,,1]),
@@ -417,6 +466,32 @@ sum(cindex_fgr_ts_deter)
 # Prediction
 
 pred_rf_full_det <- predict.rfsrc(arfsurv.obj_deter_full,data_ts_for_rf_full2)
+
+# Time-dependent AUROC LR-RSF
+
+auroc_t_LR_RSF_Full_deter <- rep(0,14)
+for(i in 1:14){
+  auroc_temp <- timeROC(T=time_cr,
+                        delta=cause_cr,
+                        weighting="marginal",
+                        marker=pred_rf_full_det$cif[,i,2],
+                        cause=2,
+                        times=c(i+1)*24)
+  auroc_t_LR_RSF_Full_deter[i] <- as.numeric(auroc_temp$AUC_1[2])
+}
+
+# Time-dependent AUROC GT-RSF
+
+auroc_t_GT_RSF_Full_deter <- rep(0,14)
+for(i in 1:14){
+  auroc_temp <- timeROC(T=time_cr,
+                        delta=cause_cr,
+                        weighting="marginal",
+                        marker=pred_rf_full_alt_fg$cif[,i,2],
+                        cause=2,
+                        times=c(i+1)*24)
+  auroc_t_GT_RSF_Full_deter[i] <- as.numeric(auroc_temp$AUC_2[2])
+}
 
 # Generic formula for RSF
 form_rsf_full_det <- formula(paste0("Surv(time=los, event=Deterioro) ~ ",
@@ -722,6 +797,19 @@ cindex_lasso_csc_deter <- compRiskModels_imp_mice_lasso_deter_ts$c_index$CauseSp
 # C-Index FG
 cindex_lasso_fgr_deter <- compRiskModels_imp_mice_lasso_deter_ts$c_index$FGR
 
+# Time-dependent AUROC CSC-LASSO
+
+auroc_t_CSC_LASSO_deter <- rep(0,14)
+for(i in 1:14){
+  auroc_temp <- timeROC(T=time_cr,
+                        delta=cause_cr,
+                        weighting="marginal",
+                        marker=compRiskModels_imp_mice_lasso_deter_ts$pred_csc[,i],
+                        cause=2,
+                        times=c(i+1)*24)
+  auroc_t_CSC_LASSO_deter[i] <- as.numeric(auroc_temp$AUC_1[2])
+}
+
 ## Ensemble learning
 
 # Prediction LR-RSF
@@ -841,6 +929,19 @@ brier_bess_fgr_disc <- compRiskModels_imp_mice_bess_disc_ts$IPA_fgr %>% filter(m
 cindex_bess_csc_disc <- compRiskModels_imp_mice_bess_disc_ts$c_index$CauseSpecificCox
 # C-Index FG
 cindex_bess_fgr_disc <- compRiskModels_imp_mice_bess_disc_ts$c_index$FGR
+
+# Time-dependent AUROC CSC-BeSS
+
+auroc_t_CSC_BeSS_disc <- rep(0,14)
+for(i in 1:14){
+  auroc_temp <- timeROC(T=time_cr,
+                        delta=cause_cr,
+                        weighting="marginal",
+                        marker=compRiskModels_imp_mice_bess_disc_ts$pred_csc[,i],
+                        cause=1,
+                        times=c(i+1)*24)
+  auroc_t_CSC_BeSS_disc[i] <- as.numeric(auroc_temp$AUC_1[2])
+}
 
 ## Ensemble learning
 
@@ -972,6 +1073,19 @@ brier_bess_fgr_deter <- compRiskModels_imp_mice_bess_deter_ts$IPA_fgr %>% filter
 cindex_bess_csc_deter <- compRiskModels_imp_mice_bess_deter_ts$c_index$CauseSpecificCox
 # C-Index FG
 cindex_bess_fgr_deter <- compRiskModels_imp_mice_bess_deter_ts$c_index$FGR
+
+# Time-dependent AUROC FG-BeSS
+
+auroc_t_FG_BeSS_deter <- rep(0,14)
+for(i in 1:14){
+  auroc_temp <- timeROC(T=time_cr,
+                        delta=cause_cr,
+                        weighting="marginal",
+                        marker=compRiskModels_imp_mice_bess_deter_ts$pred_fgr[,i],
+                        cause=2,
+                        times=c(i+1)*24)
+  auroc_t_FG_BeSS_deter[i] <- as.numeric(auroc_temp$AUC_2[2])
+}
 
 ## Ensemble learning
 
